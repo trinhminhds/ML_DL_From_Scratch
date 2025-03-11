@@ -33,7 +33,7 @@ class SVM:
         predict(X): Predicts the labels for the given data.
     """
 
-    def __init__(self, iterations, lr, lambdaa):
+    def __init__(self, iterations=None, lr=None, lambdaa=None):
         """
         Initializes the SVM model.
 
