@@ -38,11 +38,11 @@ class SVM:
         Initializes the SVM model.
 
         Parameters:
-            iterations: int, default=1000
+            iterations: int, default= 1000
                 The number of iterations for gradient descent.
-            lr: float, default=0.01
+            lr: float, default= 0.01
                 The learning rate for gradient descent.
-            lambdaa: float, default=0.01
+            lambdaa: float, default= 0.01
                 The regularization parameter.
         """
         self.lambdaa = lambdaa
