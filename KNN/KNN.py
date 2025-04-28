@@ -94,3 +94,12 @@ class KNN:
         distances = np.array(distances)
 
         # Sort by ascendingly distance and return
+        n_neighbors_idxs = np.argsort(distances)[: self.n_neighbors]
+
+        # Get labels of n-neighbour indexes
+        labels = self.y_train[n_neighbors_idxs]
+        labels = list(labels)
+
+        # Get the most frequent class in the array
+        most_occurring_value = np.argmax(labels)
+        return most_occurring_value
