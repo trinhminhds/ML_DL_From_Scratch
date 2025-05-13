@@ -71,21 +71,19 @@ class RNN:
 
         # model parameters
         self.Wax = np.random.uniform(
-            -np.sqrt(
-                1.0 / (self.vocab_size),
-                np.sqrt(1.0 / self.vocab_size),
-                (hidden_size, self.vocab_size),
-            ),
+            -np.sqrt(1.0 / self.vocab_size),
+            np.sqrt(1.0 / self.vocab_size),
+            size=(hidden_size, self.vocab_size),
         )
         self.Waa = np.random.uniform(
             -np.sqrt(1.0 / hidden_size),
             np.sqrt(1.0 / hidden_size),
-            (hidden_size, hidden_size),
+            size=(hidden_size, hidden_size),
         )
         self.Wya = np.random.uniform(
             -np.sqrt(1.0 / hidden_size),
             np.sqrt(1.0 / hidden_size),
-            (self.vocab_size, hidden_size),
+            size=(self.vocab_size, hidden_size),
         )
         self.ba = np.zeros((hidden_size, 1))
         self.by = np.zeros((self.vocab_size, 1))
@@ -264,13 +262,155 @@ class RNN:
         self.mby = beta1 * self.mby + (1 - beta1) * self.dby
         self.vby = beta2 * self.vby + (1 - beta2) * np.square(self.dby)
 
-        def sample(self):
-            """
-            Sample a sequence of characters from the RNN
+    def sample(self):
+        """
+        Sample a sequence of characters from the RNN
 
-            Arguments:
-                None
+        Arguments:
+            None
 
-            Returns:
-                list: A list of integers representing the generated sequence.
-            """
+        Returns:
+            list: A list of integers representing the generated sequence.
+        """
+        # initialize input and hidden state
+        x = np.zeros((self.vocab_size, 1))
+        a_prev = np.zeros((self.hidden_size, 1))
+
+        # create an empty list to store the generated character indices
+        indices = []
+
+        # idx is a flag to detect a newline character, initialize it to -1
+        idx = -1
+
+        # generate sequence of character
+        counter = 0
+        max_chars = 50  # maximum number of characters to generate
+        newline_character = self.data_generator.char_to_idx[
+            "\n"
+        ]  # the newline character
+
+        while idx != newline_character and counter != max_chars:
+            # compute the hidden state
+            a = np.tanh(np.dot(self.Wax, x) + np.dot(self.Waa, a_prev) + self.ba)
+
+            # compute the out probabilities
+            y = self.softmax(np.dot(self.Wya, a) + self.by)
+
+            # sample the next character from the output probabilities
+            idx = np.random.choice(list(range(self.vocab_size)), p=y.ravel())
+
+            # set the input for the next time step
+            x = np.zeros((self.vocab_size, 1))
+            x[idx] = 1
+
+            # store the sampled character index in the list
+            indices.append(idx)
+
+            # update the sampled character index in the list
+            indices.append(idx)
+
+            # update the previous hidden state
+            a_prev = a
+
+            # increment the counter
+            counter += 1
+
+        # return the list of sampled character indices
+        return indices
+
+    def train(self, generated_names=5):
+        """
+        Train the RNN on a dataset using backpropagation through time (BPTT).
+
+        Args:
+            generated_names : an integer indicating how many examples names to generate during training.
+
+        Returns:
+            None
+        """
+        iter_num = 0
+        threshold = 5  # stopping criterion for training
+        smooth_loss = (
+            -np.log(1.0 / self.data_generator.vocab_size) * self.sequence_length
+        )  # initialize loss
+
+        while smooth_loss > threshold:
+            a_prev = np.zeros((self.hidden_size, 1))
+            idx = iter_num % self.vocab_size
+
+            # get a batch of input and targets
+            inputs, target = self.data_generator.generate_example(idx)
+
+            # forward pass
+            x, a, y_preds = self.forward(inputs, a_prev)
+
+            # backward pass
+            self.backward(x, a, y_preds, target)
+
+            # calculate and update loss
+            loss = self.loss(y_preds, target)
+            self.adamw()
+            smooth_loss = smooth_loss * 0.999 + loss * 0.001
+
+            # update previous hidden state for the next batch
+            a_prev = a[len(self.X) - 1]
+            # print progress every 500 iteractions
+            if iter_num % 500 == 0:
+                print("\n\niter %d, loss %f\n" % (iter_num, smooth_loss))
+                for i in range(generated_names):
+                    sample_idx = self.sample()
+                    txt = "".join(
+                        self.data_generator.idx_to_char[idx] for idx in sample_idx
+                    )
+                    txt = txt.title()  # capitalize first character
+                    print("%s" % (txt,), end="")
+            iter_num += 1
+
+    def predict(self, start):
+        """
+        Generated a sequence of characters using the trained self, starting from the given start sequence.
+        The generated sequence may contain a maximum of 50 character or a newline character.
+
+        Arg:
+            - start: a string containing the start sequence.
+
+        Returns:
+            - txt: a string containing the generated sequence.
+        """
+        # Initialize input vector and previous hidden state
+        x = np.zeros((self.vocab_size, 1))
+        a_prev = np.zeros((self.hidden_size, 1))
+
+        # Convert start sequence to indices
+        chars = [ch for ch in start]
+        idxes = []
+        for i in range(len(chars)):
+            idx = self.data_generator.char_to_idx[chars[i]]
+            x[idx] = 1
+            idxes.append(idx)
+
+        # Generate sequence
+        max_chars = 50  # maximum number of characters to generate
+        newline_character = self.data_generator.char_to_idx["\n"]
+        counter = 0
+        while idx != newline_character and counter != max_chars:
+            # compute next hidden state and predicted character
+            a = np.tanh(np.dot(self.Wax, x) + np.dot(self.Waa, a_prev) + self.ba)
+            y_preds = self.softmax(np.dot(self.Wya, a) + self.by)
+            idx = np.random.choice(range(self.vocab_size), p=y_preds.ravel())
+
+            # Update input vector, previous hidden state, and indies
+            x = np.zeros((self.vocab_size, 1))
+            x[idx] = 1
+            a_prev = a
+            idxes.append(idx)
+            counter += 1
+
+        # Covert indices to characters and concatenate into a string
+        txt = "".join(self.data_generator.idx_to_char[i] for i in idxes)
+
+        # Remove newline characters if it exists at the end of the generated sequence
+        if txt[-1] == "\n":
+            txt = txt[:-1]
+
+        return txt
